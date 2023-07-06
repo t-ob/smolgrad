@@ -7,24 +7,15 @@
 class Value : public std::enable_shared_from_this<Value>
 {
 public:
-    // Enum
-    enum class Operation
-    {
-        ADD,
-        SUB,
-        MUL,
-        DIV,
-        NEG,
-        POW
-    };
-
     // Factory methods
     static Value constant(size_t size, float value);
+    static Value rand(size_t size, float min, float max);
+    static Value randn(size_t size, float mean, float stddev);
 
     // Constructor
     Value(size_t size);
     Value(std::initializer_list<float> values);
-    Value(size_t size, std::initializer_list<Value*> refs, Operation op);
+    Value(size_t size, std::initializer_list<Value*> refs);
 
 
     // Copy constructor
@@ -50,14 +41,13 @@ public:
     Value* operator/(float other);
 
     Value* pow(float exponent);
+    Value* exp();
+    Value* tanh();
 
     // Member function
     size_t getSize() const;
     std::unique_ptr<float[]>& getData();
     std::unique_ptr<float[]>& getGrad();
-
-    // Graphviz DOT output
-//    std::string toDot() const;
 
     // Set backward function
     void setBackward(std::function<void()> backward);
@@ -74,6 +64,5 @@ private:
     std::unique_ptr<float[]> mGrad;
     std::unique_ptr<float[]> mData;
     std::vector<Value*> mReferences;
-    std::optional<Operation> mOperation;
     std::function<void()> mBackward;
 };

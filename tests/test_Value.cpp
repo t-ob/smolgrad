@@ -77,3 +77,41 @@ TEST(TestBackward, TestMul) {
     grad = b->getGrad().get();
     ASSERT_EQ(grad[0], 2.0f);
 }
+
+TEST(TestBackward, TestDiv) {
+    // Positive numerator, positive denominator
+    auto a = new Value {2.0f};
+    auto b = new Value {3.0f};
+    auto c = *a / *b;
+    c->backward();
+
+    auto grad = a->getGrad().get();
+    EXPECT_NEAR(grad[0], 1.0f / 3.0f, 1e-5);
+
+    grad = b->getGrad().get();
+    EXPECT_NEAR(grad[0], -2.0f / 9.0f, 1e-5);
+
+    // Negative numerator, positive denominator
+    a = new Value {-2.0f};
+    b = new Value {3.0f};
+    c = *a / *b;
+    c->backward();
+
+    grad = a->getGrad().get();
+    EXPECT_NEAR(grad[0], 1.0f / 3.0f, 1e-5);
+
+    grad = b->getGrad().get();
+    EXPECT_NEAR(grad[0], 2.0f / 9.0f, 1e-5);
+
+    // Positive numerator, negative denominator
+    a = new Value {2.0f};
+    b = new Value {-3.0f};
+    c = *a / *b;
+    c->backward();
+
+    grad = a->getGrad().get();
+    EXPECT_NEAR(grad[0], -1.0f / 3.0f, 1e-5);
+
+    grad = b->getGrad().get();
+    EXPECT_NEAR(grad[0], -2.0f / 9.0f, 1e-5);
+}

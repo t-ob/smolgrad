@@ -1,8 +1,10 @@
-#include <cstddef>
-#include <cmath>
-#include <iostream>
-#include <stdexcept>
 #include <algorithm>
+#include <cmath>
+#include <cstddef>
+#include <iostream>
+#include <unordered_set>
+#include <random>
+#include <stdexcept>
 #include "Value.h"
 
 // Factory methods
@@ -16,6 +18,34 @@ Value Value::constant(size_t size, float value) {
     return constant;
 }
 
+Value Value::rand(size_t size, float min, float max) {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<float> dis(min, max);
+
+    Value rand(size);
+
+    for (size_t i = 0; i < size; ++i) {
+        rand.mData[i] = dis(gen);
+    }
+
+    return rand;
+}
+
+Value Value::randn(size_t size, float mean, float stddev) {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::normal_distribution<float> dis(mean, stddev);
+
+    Value randn(size);
+
+    for (size_t i = 0; i < size; ++i) {
+        randn.mData[i] = dis(gen);
+    }
+
+    return randn;
+}
+
 // Constructor
 Value::Value(size_t size)
         : mData(new float[size]()), mGrad(new float[size]()), mSize(size)  // Initialize `value` with `initialValue`
@@ -27,8 +57,8 @@ Value::Value(std::initializer_list<float> values)
     std::copy(values.begin(), values.end(), &mData[0]);
 }
 
-Value::Value(size_t size, std::initializer_list<Value *> refs, Operation op)
-        : mData(new float[size]()), mGrad(new float[size]()), mSize(size), mReferences(refs), mOperation(op) {
+Value::Value(size_t size, std::initializer_list<Value *> refs)
+        : mData(new float[size]()), mGrad(new float[size]()), mSize(size), mReferences(refs) {
 
 }
 
@@ -68,12 +98,10 @@ Value *Value::operator+(Value &other) {
         throw std::logic_error("size mismatch");
     }
 
-    auto result = new Value(mSize, {this, &other}, Operation::ADD);
+    auto result = new Value(mSize, {this, &other});
     result->setBackward([result, this, &other]() {
         for (size_t i = 0; i < mSize; ++i) {
             mGrad[i] += result->mGrad[i];
-        }
-        for (size_t i = 0; i < mSize; ++i) {
             other.mGrad[i] += result->mGrad[i];
         }
     });
@@ -86,25 +114,7 @@ Value *Value::operator+(Value &other) {
 }
 
 Value *Value::operator-(Value &other) {
-    if (mSize != other.mSize) {
-        throw std::logic_error("size mismatch");
-    }
-
-    auto result = new Value(mSize, {this, &other}, Operation::SUB);
-    result->setBackward([result, this, &other]() {
-        for (size_t i = 0; i < mSize; ++i) {
-            mGrad[i] += result->mGrad[i];
-        }
-        for (size_t i = 0; i < mSize; ++i) {
-            other.mGrad[i] -= result->mGrad[i];
-        }
-    });
-
-    for (size_t i = 0; i < mSize; ++i) {
-        result->mData[i] = mData[i] - other.mData[i];
-    }
-
-    return result;
+    return *this + *(-(other));
 }
 
 Value *Value::operator*(Value &other) {
@@ -112,12 +122,10 @@ Value *Value::operator*(Value &other) {
         throw std::logic_error("size mismatch");
     }
 
-    auto result = new Value(mSize, {this, &other}, Operation::MUL);
+    auto result = new Value(mSize, {this, &other});
     result->setBackward([result, this, &other]() {
         for (size_t i = 0; i < mSize; ++i) {
             mGrad[i] += result->mGrad[i] * other.mData[i];
-        }
-        for (size_t i = 0; i < mSize; ++i) {
             other.mGrad[i] += result->mGrad[i] * mData[i];
         }
     });
@@ -130,31 +138,20 @@ Value *Value::operator*(Value &other) {
 }
 
 Value *Value::operator/(Value &other) {
-    if (mSize != other.mSize) {
-        throw std::logic_error("size mismatch");
-    }
-
-    auto result = new Value(mSize, {this, &other}, Operation::DIV);
-
-    for (size_t i = 0; i < mSize; ++i) {
-        result->mData[i] = mData[i] / other.mData[i];
-    }
-
-    return result;
+    return *this * *other.pow(-1.0f);
 }
 
 Value *Value::operator-() {
-    auto result = new Value(mSize, {this}, Operation::NEG);
-
-    for (size_t i = 0; i < mSize; ++i) {
-        result[i] = -mData[i];
-    }
-
-    return result;
+    return *this * -1.0f;
 }
 
 Value *Value::operator+(float other) {
-    auto result = new Value(mSize, {this}, Operation::ADD);
+    auto result = new Value(mSize, {this});
+    result->setBackward([result, this]() {
+        for (size_t i = 0; i < mSize; ++i) {
+            mGrad[i] += result->mGrad[i];
+        }
+    });
 
     for (size_t i = 0; i < mSize; ++i) {
         result->mData[i] = mData[i] + other;
@@ -164,17 +161,16 @@ Value *Value::operator+(float other) {
 }
 
 Value *Value::operator-(float other) {
-    auto result = new Value(mSize, {this}, Operation::SUB);
-
-    for (size_t i = 0; i < mSize; ++i) {
-        result->mData[i] = mData[i] - other;
-    }
-
-    return result;
+    return *this + (-other);
 }
 
 Value *Value::operator*(float other) {
-    auto result = new Value(mSize, {this}, Operation::MUL);
+    auto result = new Value(mSize, {this});
+    result->setBackward([result, this, other]() {
+        for (size_t i = 0; i < mSize; ++i) {
+            mGrad[i] += result->mGrad[i] * other;
+        }
+    });
 
     for (size_t i = 0; i < mSize; ++i) {
         result->mData[i] = mData[i] * other;
@@ -184,20 +180,49 @@ Value *Value::operator*(float other) {
 }
 
 Value *Value::operator/(float other) {
-    auto result = new Value(mSize, {this}, Operation::DIV);
+    return *this * (1.0f / other);
+}
+
+Value *Value::pow(float exponent) {
+    auto result = new Value(mSize, {this});
+    result->setBackward([result, this, exponent]() {
+        for (size_t i = 0; i < mSize; ++i) {
+            mGrad[i] += result->mGrad[i] * exponent * std::pow(mData[i], exponent - 1.0f);
+        }
+    });
 
     for (size_t i = 0; i < mSize; ++i) {
-        result->mData[i] = mData[i] / other;
+        result->mData[i] = std::pow(mData[i], exponent);
     }
 
     return result;
 }
 
-Value *Value::pow(float exponent) {
-    auto result = new Value(mSize, {this}, Operation::POW);
+Value *Value::exp() {
+    auto result = new Value(mSize, {this});
+    result->setBackward([result, this]() {
+        for (size_t i = 0; i < mSize; ++i) {
+            mGrad[i] += result->mGrad[i] * result->mData[i];
+        }
+    });
 
     for (size_t i = 0; i < mSize; ++i) {
-        result->mData[i] = std::pow(mData[i], exponent);
+        result->mData[i] = std::exp(mData[i]);
+    }
+
+    return result;
+}
+
+Value *Value::tanh() {
+    auto result = new Value(mSize, {this});
+    result->setBackward([result, this]() {
+        for (size_t i = 0; i < mSize; ++i) {
+            mGrad[i] += result->mGrad[i] * (1.0f - result->mData[i] * result->mData[i]);
+        }
+    });
+
+    for (size_t i = 0; i < mSize; ++i) {
+        result->mData[i] = std::tanh(mData[i]);
     }
 
     return result;
@@ -216,52 +241,11 @@ std::unique_ptr<float[]> &Value::getGrad() {
     return mGrad;
 }
 
-// Graphviz DOT output
-//std::string Value::toDot() const {
-//    // Get all nodes in graph
-//    std::vector<std::shared_ptr<const Value>> nodes;
-//    std::vector<std::shared_ptr<const Value>> queue;
-//    queue.push_back(this->shared_from_this());
-//    while (!queue.empty()) {
-//        auto node = queue.back();
-//        queue.pop_back();
-//
-//        if (std::find(nodes.begin(), nodes.end(), node) == nodes.end()) {
-//            nodes.push_back(node);
-//            for (auto &ref : node->references) {
-//                queue.push_back(ref);
-//            }
-//        }
-//    }
-//
-//    // Get all edges in graph
-//    std::vector<std::pair<std::shared_ptr<const Value>, std::shared_ptr<const Value>>> edges;
-//    for (auto &node : nodes) {
-//        for (auto &ref : node->references) {
-//            edges.emplace_back(node, ref);
-//        }
-//    }
-//
-//    // Generate DOT
-//    std::string dot = "digraph G {\n";
-//    for (auto &node : nodes) {
-//        dot += "    " + std::to_string(node.get()) + " [label=\"" + node->operationToString() + "\"];\n";
-//        if (node->mOperation) {
-//            dot += "    " + std::to_string(node.get()) + " [shape=box];\n";
-//        }
-//    }
-//    for (auto &edge : edges) {
-//        dot += "    " + std::to_string(edge.first.get()) + " -> " + std::to_string(edge.second.get()) + ";\n";
-//    }
-//    dot += "}\n";
-//
-//    return dot;
-//}
 
 // Output stream
 std::ostream &operator<<(std::ostream &os, const Value &obj) {
     // write obj to stream
-    os << "MyClass: " << obj.getSize();
+    os << "Value: " << obj.getSize();
     return os;
 }
 
@@ -271,12 +255,16 @@ void Value::setBackward(std::function<void()> backward) {
 
 void Value::backward() {
     struct Helper {
-        static void sort(Value *value, std::vector<Value *> &visiting, std::vector<Value *> &visited) {
+        static void sort(Value *value, std::unordered_set<Value *> &visited, std::vector<Value *> &visiting, std::vector<Value *> &result) {
+            if (visited.find(value) != visited.end()) {
+                return;
+            }
+            visited.insert(value);
             visiting.push_back(value);
             for (auto &ref: value->mReferences) {
-                sort(ref, visiting, visited);
+                sort(ref, visited, visiting, result);
             }
-            visited.push_back(value);
+            result.push_back(value);
             visiting.pop_back();
         }
     };
@@ -285,11 +273,12 @@ void Value::backward() {
         mGrad[i] = 1.0f;
     }
 
+    std::unordered_set<Value *> visited;
     std::vector<Value *> visiting;
-    std::vector<Value *> visited;
-    Helper::sort(this, visiting, visited);
+    std::vector<Value *> sorted;
+    Helper::sort(this, visited, visiting, sorted);
 
-    for (auto it = visited.rbegin(); it != visited.rend(); ++it) {
+    for (auto it = sorted.rbegin(); it != sorted.rend(); ++it) {
         if ((*it)->mBackward) {
             (*it)->mBackward();
         }
