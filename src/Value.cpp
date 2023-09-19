@@ -62,6 +62,17 @@ Value::Value(size_t size, std::initializer_list<Value *> refs)
 
 }
 
+Value::Value(size_t size, std::vector<Value *> &refs)
+        : mData(new float[size]()), mGrad(new float[size]()), mSize(size), mReferences(refs) {
+
+}
+
+Value::Value(size_t size, float *values)
+    : mData(new float[size]()), mGrad(new float[size]()), mSize(size) {
+    std::copy(values, values + size, &mData[0]);
+}
+
+
 // Copy constructor
 Value::Value(const Value &other)
         : mData(new float[other.mSize]), mGrad(new float[other.mSize]()), mSize(other.mSize) {
@@ -233,12 +244,17 @@ size_t Value::getSize() const {
     return mSize;
 }
 
-std::unique_ptr<float[]> &Value::getData() {
-    return mData;
+std::unique_ptr<std::vector<float>> Value::getData() {
+    auto result = std::make_unique<std::vector<float>>();
+    for (size_t i = 0; i < mSize; ++i) {
+        result->push_back(mData[i]);
+    }
+
+    return result;
 }
 
-std::unique_ptr<float[]> &Value::getGrad() {
-    return mGrad;
+Value *Value::getGrad() {
+    return new Value(mSize, mGrad.get());
 }
 
 
@@ -282,5 +298,105 @@ void Value::backward() {
         if ((*it)->mBackward) {
             (*it)->mBackward();
         }
+    }
+}
+
+Value *Value::sum() {
+    auto result = new Value(1, {this});
+    result->setBackward([result, this]() {
+        for (size_t i = 0; i < mSize; ++i) {
+            mGrad[i] += result->mGrad[0];
+        }
+    });
+
+    float sum = 0.0f;
+    for (size_t i = 0; i < mSize; ++i) {
+        sum += mData[i];
+    }
+    result->mData[0] = sum;
+
+    return result;
+}
+
+Value *Value::dot(Value &other) {
+    auto result = *this * other;
+    return result->sum();
+}
+
+float Value::at(size_t index) const {
+    return mData[index];
+}
+
+Value *Value::concat(std::initializer_list<Value *> values) {
+    size_t size = 0;
+    for (auto &value: values) {
+        size += value->getSize();
+    }
+
+    auto result = new Value(size, values);
+    result->setBackward([result, values]() {
+        size_t offset = 0;
+        for (auto &value: values) {
+            for (size_t i = 0; i < value->getSize(); ++i) {
+                value->mGrad[i] += result->mGrad[offset + i];
+            }
+            offset += value->getSize();
+        }
+    });
+
+    size_t offset = 0;
+    for (auto &value: values) {
+        for (size_t i = 0; i < value->getSize(); ++i) {
+            result->mData[offset + i] = value->mData[i];
+        }
+        offset += value->getSize();
+    }
+
+    return result;
+}
+
+Value *Value::concat(std::vector<Value *> &values) {
+    size_t size = 0;
+    for (auto &value: values) {
+        size += value->getSize();
+    }
+
+    auto result = new Value(size, values);
+    result->setBackward([result, values]() {
+        size_t offset = 0;
+        for (auto &value: values) {
+            for (size_t i = 0; i < value->getSize(); ++i) {
+                value->mGrad[i] += result->mGrad[offset + i];
+            }
+            offset += value->getSize();
+        }
+    });
+
+    size_t offset = 0;
+    for (auto &value: values) {
+        for (size_t i = 0; i < value->getSize(); ++i) {
+            result->mData[offset + i] = value->mData[i];
+        }
+        offset += value->getSize();
+    }
+
+    return result;
+}
+
+void Value::clearGrad() {
+    for (size_t i = 0; i < mSize; ++i) {
+        mGrad[i] = 0.0f;
+    }
+}
+
+void Value::operator+=(Value &other) {
+    for (size_t i = 0; i < mSize; ++i) {
+        mData[i] += other.mData[i];
+    }
+}
+
+void Value::operator-=(Value &other) {
+    for (size_t i = 0; i < mSize; ++i) {
+        mData[i] -= other.mData[i];
     }
 }

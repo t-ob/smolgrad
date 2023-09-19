@@ -8,8 +8,8 @@ project(gradlibTests)
 # Check https://cmake.org/cmake/help/v3.10/policy/CMP0079.html for details
 #cmake_policy(SET CMP0079 NEW)
 
-# Compile as C++17
-set(CMAKE_CXX_STANDARD 17)
+# Compile as C++20
+#set(CMAKE_CXX_STANDARD 20)
 
 include(FetchContent)
 FetchContent_Declare(
@@ -25,6 +25,9 @@ FetchContent_MakeAvailable(googletest)
 # Add all your test cpp files
 set(TEST_SRC
         test_Value.cpp
+        test_Neuron.cpp
+        test_Layer.cpp
+        test_MultiLayerPerceptron.cpp
         # Add more test source files here
         main.cpp)
 

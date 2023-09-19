@@ -1,10 +1,11 @@
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <optional>
 #include <vector>
 
-class Value : public std::enable_shared_from_this<Value>
+class Value
 {
 public:
     // Factory methods
@@ -12,10 +13,15 @@ public:
     static Value rand(size_t size, float min, float max);
     static Value randn(size_t size, float mean, float stddev);
 
+    static Value* concat(std::initializer_list<Value*> values);
+    static Value* concat(std::vector<Value*>& values);
+
     // Constructor
     Value(size_t size);
     Value(std::initializer_list<float> values);
     Value(size_t size, std::initializer_list<Value*> refs);
+    Value(size_t size, std::vector<Value*> &refs);
+    Value(size_t size, float *values);
 
 
     // Copy constructor
@@ -35,6 +41,9 @@ public:
     Value* operator/(Value& other);
     Value* operator-();
 
+    void operator+=(Value& other);
+    void operator-=(Value& other);
+
     Value* operator+(float other);
     Value* operator-(float other);
     Value* operator*(float other);
@@ -46,14 +55,24 @@ public:
 
     // Member function
     size_t getSize() const;
-    std::unique_ptr<float[]>& getData();
-    std::unique_ptr<float[]>& getGrad();
+    std::unique_ptr<std::vector<float>> getData();
+    Value* getGrad();
+    float at(size_t index) const;
 
     // Set backward function
     void setBackward(std::function<void()> backward);
 
     // Backward pass
     void backward();
+
+    // Clear gradient
+    void clearGrad();
+
+    // Sum
+    Value* sum();
+
+    // Dot product
+    Value *dot(Value &other);
 
     // << operator
     friend std::ostream& operator<<(std::ostream& os, const Value& value);

@@ -11,10 +11,10 @@ EXPECT_EQ(10, value.getSize());
 Value value2 {1.0f, 2.0f, 3.0f};
 EXPECT_EQ(3, value2.getSize());
 
-auto grad = value2.getGrad().get();
-    EXPECT_EQ(0.0f, grad[0]);
-    EXPECT_EQ(0.0f, grad[1]);
-    EXPECT_EQ(0.0f, grad[2]);
+auto grad = value2.getGrad()->getData();
+    EXPECT_EQ(0.0f, (*grad)[0]);
+    EXPECT_EQ(0.0f, (*grad)[1]);
+    EXPECT_EQ(0.0f, (*grad)[2]);
 }
 
 TEST(TestValue, TestConstant) {
@@ -34,7 +34,7 @@ TEST(TestValue, TestArithmetic) {
     auto f = new Value {-2.0f};
     auto L = *d * *f; // L = -8
 
-    auto data = L->getData().get();
+    auto data = *L->getData();
 
     ASSERT_EQ(data[0], -8.0f);
 }
@@ -45,10 +45,10 @@ TEST(TestBackward, TestPlus) {
     auto c = *a + *b;
     c->backward();
 
-    auto grad = a->getGrad().get();
+    auto grad = *a->getGrad()->getData();
     ASSERT_EQ(grad[0], 1.0f);
 
-    grad = b->getGrad().get();
+    grad = *b->getGrad()->getData();
     ASSERT_EQ(grad[0], 1.0f);
 }
 
@@ -58,10 +58,10 @@ TEST(TestBackward, TestMinus) {
     auto c = *a - *b;
     c->backward();
 
-    auto grad = a->getGrad().get();
+    auto grad = *a->getGrad()->getData();
     ASSERT_EQ(grad[0], 1.0f);
 
-    grad = b->getGrad().get();
+    grad = *b->getGrad()->getData();
     ASSERT_EQ(grad[0], -1.0f);
 }
 
@@ -71,10 +71,10 @@ TEST(TestBackward, TestMul) {
     auto c = *a * *b;
     c->backward();
 
-    auto grad = a->getGrad().get();
+    auto grad = *a->getGrad()->getData();
     ASSERT_EQ(grad[0], -3.0f);
 
-    grad = b->getGrad().get();
+    grad = *b->getGrad()->getData();
     ASSERT_EQ(grad[0], 2.0f);
 }
 
@@ -85,10 +85,10 @@ TEST(TestBackward, TestDiv) {
     auto c = *a / *b;
     c->backward();
 
-    auto grad = a->getGrad().get();
+    auto grad = *a->getGrad()->getData();
     EXPECT_NEAR(grad[0], 1.0f / 3.0f, 1e-5);
 
-    grad = b->getGrad().get();
+    grad = *b->getGrad()->getData();
     EXPECT_NEAR(grad[0], -2.0f / 9.0f, 1e-5);
 
     // Negative numerator, positive denominator
@@ -97,10 +97,10 @@ TEST(TestBackward, TestDiv) {
     c = *a / *b;
     c->backward();
 
-    grad = a->getGrad().get();
+    grad = *a->getGrad()->getData();
     EXPECT_NEAR(grad[0], 1.0f / 3.0f, 1e-5);
 
-    grad = b->getGrad().get();
+    grad = *b->getGrad()->getData();
     EXPECT_NEAR(grad[0], 2.0f / 9.0f, 1e-5);
 
     // Positive numerator, negative denominator
@@ -109,9 +109,35 @@ TEST(TestBackward, TestDiv) {
     c = *a / *b;
     c->backward();
 
-    grad = a->getGrad().get();
+    grad = *a->getGrad()->getData();
     EXPECT_NEAR(grad[0], -1.0f / 3.0f, 1e-5);
 
-    grad = b->getGrad().get();
+    grad = *b->getGrad()->getData();
     EXPECT_NEAR(grad[0], -2.0f / 9.0f, 1e-5);
+}
+
+TEST(TestDot, TestValue) {
+    auto a = new Value {1.0f, 1.0f};
+    auto b = new Value {2.0f, 3.0f};
+
+    auto c = a->dot(*b);
+    c->backward();
+
+    auto grad_a = *a->getGrad()->getData();
+    auto grad_b = *b->getGrad()->getData();
+
+    ASSERT_EQ(grad_a[0], 2.0f);
+    ASSERT_EQ(grad_a[1], 3.0f);
+    ASSERT_EQ(grad_b[0], 1.0f);
+    ASSERT_EQ(grad_b[1], 1.0f);
+}
+
+TEST(TestDot, TestGradients) {
+    auto a = new Value {1.0f, 1.0f};
+    auto b = new Value {2.0f, 3.0f};
+
+    auto c = a->dot(*b);
+    auto c_data = *c->getData();
+
+    ASSERT_EQ(c_data[0], 5.0f);
 }
