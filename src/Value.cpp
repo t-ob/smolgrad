@@ -271,17 +271,15 @@ void Value::setBackward(std::function<void()> backward) {
 
 void Value::backward() {
     struct Helper {
-        static void sort(Value *value, std::unordered_set<Value *> &visited, std::vector<Value *> &visiting, std::vector<Value *> &result) {
+        static void sort(Value *value, std::unordered_set<Value *> &visited, std::vector<Value *> &result) {
             if (visited.find(value) != visited.end()) {
                 return;
             }
             visited.insert(value);
-            visiting.push_back(value);
             for (auto &ref: value->mReferences) {
-                sort(ref, visited, visiting, result);
+                sort(ref, visited, result);
             }
             result.push_back(value);
-            visiting.pop_back();
         }
     };
 
@@ -290,9 +288,8 @@ void Value::backward() {
     }
 
     std::unordered_set<Value *> visited;
-    std::vector<Value *> visiting;
     std::vector<Value *> sorted;
-    Helper::sort(this, visited, visiting, sorted);
+    Helper::sort(this, visited, sorted);
 
     for (auto it = sorted.rbegin(); it != sorted.rend(); ++it) {
         if ((*it)->mBackward) {
